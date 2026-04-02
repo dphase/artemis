@@ -1,113 +1,115 @@
 import SceneKit
-import Combine
 
-/// Central scene controller that owns the SCNScene and coordinates all 3D nodes
-/// for the Artemis mission visualization.
-///
-/// Scene scale: 1 unit = 1 Earth radius (6,371 km).
-/// Earth sits at the origin; all other bodies are positioned relative to it.
-@MainActor
 final class OrbitSceneController: ObservableObject {
-
-    // MARK: - Published State
 
     @Published private(set) var spacecraftDistanceFromEarth: Double = 0
     @Published private(set) var spacecraftDistanceFromMoon: Double = 0
     @Published private(set) var spacecraftVelocity: Double = 0
 
-    // MARK: - Scene Graph
-
     let scene: SCNScene
     let cameraNode: SCNNode
 
-    private let earthNode: EarthNode
-    private let moonNode: MoonNode
-    private let spacecraftNode: SpacecraftNode
-    private let trajectoryNode: TrajectoryNode
+    private let earthNode: SCNNode
+    private let moonNode: SCNNode
+    private let spacecraftNode: SCNNode
+    private let trajectoryPath: TrajectoryPathNode
+    private let starfieldNode: SCNNode
 
-    // MARK: - Dependencies
-
-    // TrajectoryInterpolator uses static methods — no instance needed
-
-    // MARK: - Initialization
+    /// Fixed Moon position in scene coordinates (matches trajectory target after rotation)
+    private let fixedMoonPosition = SCNVector3(0, -58.5, 3)
 
     init() {
-        // --- Scene ---
-        scene = SCNScene()
-        scene.background.contents = UIColor.black
+        let s = SCNScene()
+        s.background.contents = UIColor.black
 
-        // --- Camera ---
-        let camera = SCNCamera()
-        camera.zFar = 5000
-        camera.wantsHDR = true
+        // --- Starfield on a large sphere (so we can rotate it) ---
+        let starSphere = SCNSphere(radius: 400)
+        starSphere.segmentCount = 48
+        let starMaterial = SCNMaterial()
+        starMaterial.diffuse.contents = StarfieldGenerator.generate()
+        starMaterial.isDoubleSided = true
+        starMaterial.lightingModel = .constant
+        starSphere.materials = [starMaterial]
+        let starNode = SCNNode(geometry: starSphere)
+        starNode.name = "starfield"
+        s.rootNode.addChildNode(starNode)
 
-        cameraNode = SCNNode()
-        cameraNode.name = "camera"
-        cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 30, 80)
-        cameraNode.look(at: SCNVector3Zero)
-        scene.rootNode.addChildNode(cameraNode)
+        // --- Camera (fixed) ---
+        let cam = SCNCamera()
+        cam.zFar = 1000
+        cam.zNear = 0.1
+        cam.fieldOfView = 60
+
+        let camNode = SCNNode()
+        camNode.camera = cam
+        camNode.position = SCNVector3(0, 0, 75)
+        camNode.look(at: SCNVector3(0, -33, 0))
+        s.rootNode.addChildNode(camNode)
 
         // --- Lighting ---
         let sunLight = SCNLight()
         sunLight.type = .directional
         sunLight.color = UIColor(red: 1.0, green: 0.96, blue: 0.90, alpha: 1.0)
-        sunLight.intensity = 1000
-
-        let sunLightNode = SCNNode()
-        sunLightNode.name = "sunLight"
-        sunLightNode.light = sunLight
-        sunLightNode.look(at: SCNVector3(1, 0.3, -0.5))
-        scene.rootNode.addChildNode(sunLightNode)
+        sunLight.intensity = 2500
+        let sunNode = SCNNode()
+        sunNode.light = sunLight
+        sunNode.position = SCNVector3(30, 20, 80)
+        sunNode.look(at: SCNVector3Zero)
+        s.rootNode.addChildNode(sunNode)
 
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
-        ambientLight.intensity = 100 // 0.1 on the normalized scale
-        ambientLight.color = UIColor.white
+        ambientLight.intensity = 1000
+        ambientLight.color = UIColor(white: 0.7, alpha: 1.0)
+        let ambientNode = SCNNode()
+        ambientNode.light = ambientLight
+        s.rootNode.addChildNode(ambientNode)
 
-        let ambientLightNode = SCNNode()
-        ambientLightNode.name = "ambientLight"
-        ambientLightNode.light = ambientLight
-        scene.rootNode.addChildNode(ambientLightNode)
+        // --- Earth at origin (upper center of screen) ---
+        let earth = EarthBuilder.build()
+        earth.position = SCNVector3Zero
+        s.rootNode.addChildNode(earth)
 
-        // --- Bodies ---
-        earthNode = EarthNode()
-        earthNode.position = SCNVector3Zero
-        scene.rootNode.addChildNode(earthNode)
+        // --- Moon at fixed position (lower center) ---
+        let moon = MoonBuilder.build()
+        moon.position = SCNVector3(0, -58.5, 3)
+        s.rootNode.addChildNode(moon)
 
-        moonNode = MoonNode()
-        scene.rootNode.addChildNode(moonNode)
+        // --- Spacecraft ---
+        let sc = SpacecraftBuilder.build()
+        s.rootNode.addChildNode(sc)
 
-        spacecraftNode = SpacecraftNode()
-        scene.rootNode.addChildNode(spacecraftNode)
+        // --- Trajectory path (static figure-8) ---
+        let tp = TrajectoryPathNode()
+        s.rootNode.addChildNode(tp.node)
 
-        trajectoryNode = TrajectoryNode()
-        scene.rootNode.addChildNode(trajectoryNode)
+        self.scene = s
+        self.cameraNode = camNode
+        self.earthNode = earth
+        self.moonNode = moon
+        self.spacecraftNode = sc
+        self.trajectoryPath = tp
+        self.starfieldNode = starNode
     }
 
-    // MARK: - Update
-
-    /// Advances the scene to the given mission date, updating all body positions
-    /// and published telemetry values.
     func update(for date: Date) {
-        // Spacecraft
+        // Move spacecraft along the static trajectory
         let state = TrajectoryInterpolator.state(at: date)
         spacecraftNode.position = state.position
 
-        // Moon
-        let moonPosition = EphemerisProvider.moonPosition(at: date)
-        moonNode.position = moonPosition
-
-        // Trajectory visualization (past / future split)
-        trajectoryNode.updateProgress(state.parameter)
+        // Update trajectory progress (past/future split)
+        trajectoryPath.updateProgress(state.parameter)
 
         // Telemetry
         spacecraftDistanceFromEarth = Self.distance(from: state.position, to: SCNVector3Zero)
-        spacecraftDistanceFromMoon = Self.distance(from: state.position, to: moonPosition)
+        spacecraftDistanceFromMoon = Self.distance(from: state.position, to: fixedMoonPosition)
         spacecraftVelocity = state.speed
-    }
 
-    // MARK: - Helpers
+        // Slowly rotate starfield for visual effect
+        let elapsed = date.timeIntervalSince(MissionTimeline.launchDate)
+        let angle = Float(elapsed / 86400.0 * 0.15) // ~0.15 radians per day
+        starfieldNode.eulerAngles = SCNVector3(0, angle, angle * 0.3)
+    }
 
     private static func distance(from a: SCNVector3, to b: SCNVector3) -> Double {
         let dx = Double(a.x - b.x)

@@ -2,10 +2,7 @@ import SwiftUI
 
 struct TimeControlsView: View {
     @Binding var isPlaying: Bool
-    @Binding var timeScale: Double
     @Binding var missionTime: Date
-
-    private let speeds: [Double] = [1, 10, 100, 1000]
 
     private var sliderRange: ClosedRange<Double> {
         let start = MissionTimeline.launchDate.timeIntervalSinceReferenceDate
@@ -21,58 +18,41 @@ struct TimeControlsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            // Timeline slider
+        HStack(spacing: 12) {
+            Button {
+                isPlaying.toggle()
+            } label: {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+            }
+
             Slider(value: sliderValue, in: sliderRange)
                 .tint(.white.opacity(0.7))
 
-            // Controls row
-            HStack(spacing: 16) {
-                // Play / Pause
-                Button {
-                    isPlaying.toggle()
-                } label: {
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                }
-
-                // Speed buttons
-                ForEach(speeds, id: \.self) { speed in
-                    Button {
-                        timeScale = speed
-                    } label: {
-                        Text("\(Int(speed))x")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(timeScale == speed ? .white.opacity(0.35) : .white.opacity(0.12))
-                            )
-                    }
-                }
-
-                Spacer()
-
-                // Reset button
-                Button {
+            Button {
+                let now = Date()
+                if now < MissionTimeline.launchDate {
                     missionTime = MissionTimeline.launchDate
-                } label: {
-                    Image(systemName: "backward.end.fill")
-                        .font(.body)
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
+                } else if now > MissionTimeline.splashdownDate {
+                    missionTime = MissionTimeline.splashdownDate
+                } else {
+                    missionTime = now
                 }
+                isPlaying = true
+            } label: {
+                Image(systemName: "location.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 12))
         .padding(.horizontal)
-        .padding(.bottom)
+        .padding(.bottom, 4)
     }
 }

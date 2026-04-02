@@ -7,7 +7,8 @@ struct HUDView: View {
     let distanceFromMoon: Double
     let velocity: Double
 
-    private let kmPerUnit: Double = 6_371
+    private let milesPerUnit: Double = 6_371 * 0.621371
+    private let goldColor = Color(red: 249/255, green: 214/255, blue: 105/255)
 
     private var metString: String {
         let launch = MissionTimeline.launchDate
@@ -18,66 +19,79 @@ struct HUDView: View {
         let hours = (Int(abs) % 86400) / 3600
         let minutes = (Int(abs) % 3600) / 60
         let seconds = Int(abs) % 60
-        return String(format: "%@ %02d:%02d:%02d:%02d", prefix, days, hours, minutes, seconds)
+        return String(format: "%@%02d:%02d:%02d:%02d", prefix, days, hours, minutes, seconds)
     }
 
-    private var earthDistanceKm: String {
-        let km = distanceFromEarth * kmPerUnit
+    private var dateTimeString: String {
+        let formatter = DateFormatter()
+        let uses24Hour = DateFormatter.dateFormat(
+            fromTemplate: "j",
+            options: 0,
+            locale: Locale.current
+        )?.contains("a") == false
+        formatter.dateFormat = uses24Hour ? "MMM d, HH:mm" : "MMM d, h:mm a"
+        return formatter.string(from: missionTime)
+    }
+
+    private var earthDistanceMi: String {
+        formatNumber(distanceFromEarth * milesPerUnit)
+    }
+
+    private var moonDistanceMi: String {
+        formatNumber(distanceFromMoon * milesPerUnit)
+    }
+
+    private var velocityMph: String {
+        formatNumber(velocity * 2236.936)
+    }
+
+    private func formatNumber(_ value: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: km)) ?? "\(Int(km))"
-    }
-
-    private var moonDistanceKm: String {
-        let km = distanceFromMoon * kmPerUnit
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: km)) ?? "\(Int(km))"
-    }
-
-    private var velocityString: String {
-        String(format: "%.1f", velocity)
+        return formatter.string(from: NSNumber(value: value)) ?? "\(Int(value))"
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            // Row 1: MET timer + phase badge
-            HStack {
+        VStack(spacing: 3) {
+            HStack(spacing: 0) {
                 Text(metString)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(goldColor)
+
+                Text(" / ")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.5))
+
+                Text(dateTimeString)
+                    .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.white)
 
                 Spacer()
 
                 Text(phase.rawValue)
-                    .font(.caption)
+                    .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(.white.opacity(0.2))
-                    )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .glassEffect(.clear, in: .capsule)
             }
 
-            // Row 2: Earth dist | Moon dist | Velocity
             HStack {
-                Label(earthDistanceKm + " km", systemImage: "globe.americas.fill")
+                Label(earthDistanceMi + " mi", systemImage: "globe.americas.fill")
                 Spacer()
-                Label(moonDistanceKm + " km", systemImage: "moon.fill")
+                Label(moonDistanceMi + " mi", systemImage: "moon.fill")
                 Spacer()
-                Label(velocityString + " km/s", systemImage: "gauge.with.dots.needle.33percent")
+                Label(velocityMph + " mph", systemImage: "gauge.with.dots.needle.33percent")
             }
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(.white.opacity(0.85))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding(.horizontal)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
+        .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 12))
+        .padding(.horizontal)
     }
 }

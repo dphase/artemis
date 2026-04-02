@@ -1,31 +1,26 @@
 import SceneKit
 
-final class MoonNode: SCNNode {
+enum MoonBuilder {
 
-    // MARK: - Convenience Init
+    static func build() -> SCNNode {
+        let moon = SCNNode()
+        moon.name = "Moon"
 
-    convenience init(radius: CGFloat = 0.273) {
-        self.init()
-        name = "Moon"
-
-        // --- Surface sphere ---
-        let sphere = SCNSphere(radius: radius)
+        let sphere = SCNSphere(radius: 0.273)
         sphere.segmentCount = 48
 
         let surfaceMaterial = SCNMaterial()
-        surfaceMaterial.name = "moonSurface"
-        surfaceMaterial.diffuse.contents = UIColor(white: 0.6, alpha: 1.0)
-        // Reserve material property names so textures can be swapped in later:
-        // surfaceMaterial.diffuse.contents = UIImage(named: "moon_diffuse")
-        // surfaceMaterial.normal.contents  = UIImage(named: "moon_normal")
+        surfaceMaterial.diffuse.contents = UIImage(contentsOfFile: Bundle.main.path(forResource: "moon_diffuse", ofType: "jpg") ?? "")
+        surfaceMaterial.emission.contents = UIColor(white: 0.15, alpha: 1.0)
+        surfaceMaterial.specular.contents = UIColor(white: 0.3, alpha: 1.0)
+        surfaceMaterial.shininess = 10
+        surfaceMaterial.lightingModel = .blinn
         sphere.materials = [surfaceMaterial]
 
         let surfaceNode = SCNNode(geometry: sphere)
         surfaceNode.name = "moonSurface"
-        addChildNode(surfaceNode)
+        moon.addChildNode(surfaceNode)
 
-        // Tidally locked: no self-rotation action.
-        // The parent scene controller manages orbital position so that
-        // the same face always points toward Earth.
+        return moon
     }
 }

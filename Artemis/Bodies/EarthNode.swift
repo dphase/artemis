@@ -1,41 +1,43 @@
 import SceneKit
 
-final class EarthNode: SCNNode {
+enum EarthBuilder {
 
-    // MARK: - Convenience Init
-
-    convenience init(radius: CGFloat = 1.0) {
-        self.init()
-        name = "Earth"
+    static func build() -> SCNNode {
+        let earth = SCNNode()
+        earth.name = "Earth"
 
         // --- Surface sphere ---
-        let sphere = SCNSphere(radius: radius)
-        sphere.segmentCount = 64
+        let sphere = SCNSphere(radius: 1.0)
+        sphere.segmentCount = 96
 
         let surfaceMaterial = SCNMaterial()
-        surfaceMaterial.name = "earthSurface"
-        surfaceMaterial.diffuse.contents = UIColor(red: 0.1, green: 0.3, blue: 0.6, alpha: 1.0)
-        surfaceMaterial.specular.contents = UIColor.white
-        surfaceMaterial.shininess = 25
-        // Reserve material property names so textures can be swapped in later:
-        // surfaceMaterial.diffuse.contents  = UIImage(named: "earth_diffuse")
-        // surfaceMaterial.normal.contents   = UIImage(named: "earth_normal")
-        // surfaceMaterial.specular.contents  = UIImage(named: "earth_specular")
-        // surfaceMaterial.emission.contents  = UIImage(named: "earth_emission")
+        let earthDiffuse = UIImage(contentsOfFile: Bundle.main.path(forResource: "earth_diffuse", ofType: "jpg") ?? "")
+        surfaceMaterial.diffuse.contents = earthDiffuse
+        surfaceMaterial.diffuse.wrapS = .repeat
+        surfaceMaterial.diffuse.wrapT = .repeat
+        // Multiply tint to push ocean blues toward royal blue
+        surfaceMaterial.multiply.contents = UIColor(red: 0.88, green: 0.88, blue: 1.0, alpha: 1.0)
+        // Self-illumination keeps the whole globe bright; Phong adds subtle shading
+        surfaceMaterial.selfIllumination.contents = earthDiffuse
+        surfaceMaterial.selfIllumination.intensity = 0.85
+        surfaceMaterial.specular.contents = UIColor(white: 0.4, alpha: 1.0)
+        surfaceMaterial.shininess = 20
+        surfaceMaterial.lightingModel = .phong
         sphere.materials = [surfaceMaterial]
 
         let surfaceNode = SCNNode(geometry: sphere)
         surfaceNode.name = "earthSurface"
-        addChildNode(surfaceNode)
+        earth.addChildNode(surfaceNode)
 
-        // --- Atmosphere glow ---
-        let atmosphereSphere = SCNSphere(radius: radius * 1.02)
+        // --- Thin atmosphere rim ---
+        let atmosphereSphere = SCNSphere(radius: 1.015)
         atmosphereSphere.segmentCount = 64
 
         let atmosphereMaterial = SCNMaterial()
-        atmosphereMaterial.name = "earthAtmosphere"
-        atmosphereMaterial.diffuse.contents = UIColor(red: 0.4, green: 0.7, blue: 1.0, alpha: 0.15)
-        atmosphereMaterial.emission.contents = UIColor.cyan
+        atmosphereMaterial.diffuse.contents = UIColor.clear
+        atmosphereMaterial.emission.contents = UIColor(red: 0.3, green: 0.5, blue: 1.0, alpha: 1.0)
+        atmosphereMaterial.emission.intensity = 0.15
+        atmosphereMaterial.transparent.contents = UIColor(white: 1.0, alpha: 0.08)
         atmosphereMaterial.isDoubleSided = true
         atmosphereMaterial.blendMode = .add
         atmosphereMaterial.writesToDepthBuffer = false
@@ -43,15 +45,17 @@ final class EarthNode: SCNNode {
 
         let atmosphereNode = SCNNode(geometry: atmosphereSphere)
         atmosphereNode.name = "earthAtmosphere"
-        addChildNode(atmosphereNode)
+        earth.addChildNode(atmosphereNode)
 
-        // --- Axial tilt: 23.44 degrees around the Z axis ---
-        eulerAngles.z = Float(23.44 * .pi / 180.0)
+        // --- Axial tilt ---
+        earth.eulerAngles.z = Float(23.44 * .pi / 180.0)
 
-        // --- Continuous rotation (sped up 500x for visibility) ---
+        // --- Continuous rotation ---
         let rotationAction = SCNAction.repeatForever(
             SCNAction.rotateBy(x: 0, y: 2 * .pi, z: 0, duration: 86400 / 500)
         )
         surfaceNode.runAction(rotationAction, forKey: "earthRotation")
+
+        return earth
     }
 }

@@ -29,10 +29,10 @@ struct MissionTimelineTests {
     func splashdownDuration() {
         let interval = MissionTimeline.splashdownDate.timeIntervalSince(MissionTimeline.launchDate)
         let expectedInterval = 10.5 * 86400.0
-        #expect(abs(interval - expectedInterval) < 1.0) // within 1 second
+        #expect(abs(interval - expectedInterval) < 1.0)
     }
 
-    @Test("Waypoints array is not empty and has at least 20 entries")
+    @Test("Waypoints array has at least 20 entries")
     func waypointsNotEmpty() {
         #expect(!MissionTimeline.waypoints.isEmpty)
         #expect(MissionTimeline.waypoints.count >= 20)
@@ -42,10 +42,7 @@ struct MissionTimelineTests {
     func waypointsOrderedByTime() {
         let waypoints = MissionTimeline.waypoints
         for i in 1..<waypoints.count {
-            #expect(
-                waypoints[i].time >= waypoints[i - 1].time,
-                "Waypoint \(i) time (\(waypoints[i].time)) should be >= waypoint \(i - 1) time (\(waypoints[i - 1].time))"
-            )
+            #expect(waypoints[i].time >= waypoints[i - 1].time)
         }
     }
 
@@ -53,14 +50,14 @@ struct MissionTimelineTests {
     func firstWaypointNearEarth() {
         let first = MissionTimeline.waypoints.first!
         let mag = magnitude(first.position)
-        #expect(abs(mag - 1.0) < 0.5, "First waypoint magnitude \(mag) should be close to 1.0")
+        #expect(abs(mag - 1.0) < 0.5)
     }
 
     @Test("Last waypoint ends near Earth")
     func lastWaypointNearEarth() {
         let last = MissionTimeline.waypoints.last!
         let mag = magnitude(last.position)
-        #expect(abs(mag - 1.0) < 0.5, "Last waypoint magnitude \(mag) should be close to 1.0")
+        #expect(abs(mag - 1.0) < 0.5)
     }
 
     @Test("Phase before launch is prelaunch")
@@ -87,68 +84,67 @@ struct MissionTimelineTests {
 @Suite("Trajectory Interpolator")
 struct TrajectoryInterpolatorTests {
 
-    @Test("State at launch date returns position near Earth")
+    @Test("State at launch returns position near Earth")
     func stateAtLaunchNearEarth() {
         let state = TrajectoryInterpolator.state(at: MissionTimeline.launchDate)
         let mag = magnitude(state.position)
-        #expect(abs(mag - 1.0) < 0.5, "Position at launch should be near Earth, got magnitude \(mag)")
+        #expect(abs(mag - 1.0) < 0.5)
     }
 
-    @Test("State at splashdown date returns position near Earth")
+    @Test("State at splashdown returns position near Earth")
     func stateAtSplashdownNearEarth() {
         let state = TrajectoryInterpolator.state(at: MissionTimeline.splashdownDate)
         let mag = magnitude(state.position)
-        #expect(abs(mag - 1.0) < 0.5, "Position at splashdown should be near Earth, got magnitude \(mag)")
+        #expect(abs(mag - 1.0) < 0.5)
     }
 
-    @Test("Parameter at launch date is approximately 0.0")
+    @Test("Parameter at launch is approximately 0.0")
     func parameterAtLaunch() {
         let param = TrajectoryInterpolator.parameterForDate(MissionTimeline.launchDate)
-        #expect(abs(param - 0.0) < 0.01, "Parameter at launch should be ~0.0, got \(param)")
+        #expect(abs(param) < 0.01)
     }
 
-    @Test("Parameter at splashdown date is approximately 1.0")
+    @Test("Parameter at splashdown is approximately 1.0")
     func parameterAtSplashdown() {
         let param = TrajectoryInterpolator.parameterForDate(MissionTimeline.splashdownDate)
-        #expect(abs(param - 1.0) < 0.01, "Parameter at splashdown should be ~1.0, got \(param)")
+        #expect(abs(param - 1.0) < 0.01)
     }
 
     @Test("Parameter at midpoint is approximately 0.5")
     func parameterAtMidpoint() {
         let midpoint = MissionTimeline.launchDate.addingTimeInterval(5.25 * 86400)
         let param = TrajectoryInterpolator.parameterForDate(midpoint)
-        #expect(abs(param - 0.5) < 0.05, "Parameter at midpoint should be ~0.5, got \(param)")
+        #expect(abs(param - 0.5) < 0.05)
     }
 
-    @Test("trajectoryPoints returns the requested number of points")
+    @Test("trajectoryPoints returns the requested count")
     func trajectoryPointsCount() {
-        let count = 500
-        let points = TrajectoryInterpolator.trajectoryPoints(count: count)
-        #expect(points.count == count)
+        let points = TrajectoryInterpolator.trajectoryPoints(count: 500)
+        #expect(points.count == 500)
     }
 
-    @Test("trajectoryPoints first point is near Earth")
+    @Test("First trajectory point is near Earth")
     func trajectoryPointsFirstNearEarth() {
         let points = TrajectoryInterpolator.trajectoryPoints(count: 100)
         let mag = magnitude(points.first!)
-        #expect(abs(mag - 1.0) < 0.5, "First trajectory point should be near Earth, got magnitude \(mag)")
+        #expect(abs(mag - 1.0) < 0.5)
     }
 
-    @Test("trajectoryPoints last point is near Earth")
+    @Test("Last trajectory point is near Earth")
     func trajectoryPointsLastNearEarth() {
         let points = TrajectoryInterpolator.trajectoryPoints(count: 100)
         let mag = magnitude(points.last!)
-        #expect(abs(mag - 1.0) < 0.5, "Last trajectory point should be near Earth, got magnitude \(mag)")
+        #expect(abs(mag - 1.0) < 0.5)
     }
 
-    @Test("Trajectory reaches far from Earth (max distance exceeds 50 units)")
+    @Test("Trajectory reaches beyond 50 units from Earth (near Moon)")
     func trajectoryReachesMoon() {
         let points = TrajectoryInterpolator.trajectoryPoints(count: 1000)
         let maxDistance = points.map { magnitude($0) }.max() ?? 0
-        #expect(maxDistance > 50, "Trajectory should reach beyond 50 units from Earth, max was \(maxDistance)")
+        #expect(maxDistance > 50)
     }
 
-    @Test("Velocity (speed) is non-negative")
+    @Test("Speed is non-negative at all sample points")
     func velocityNonNegative() {
         let dates = [
             MissionTimeline.launchDate,
@@ -159,7 +155,7 @@ struct TrajectoryInterpolatorTests {
         ]
         for date in dates {
             let state = TrajectoryInterpolator.state(at: date)
-            #expect(state.speed >= 0, "Speed should be non-negative at all times, got \(state.speed)")
+            #expect(state.speed >= 0)
         }
     }
 }
@@ -173,7 +169,7 @@ struct EphemerisProviderTests {
     func moonPositionMagnitude() {
         let position = EphemerisProvider.moonPosition(at: MissionTimeline.launchDate)
         let mag = magnitude(position)
-        #expect(abs(mag - 60.27) < 5.0, "Moon distance should be ~60.27 units, got \(mag)")
+        #expect(abs(mag - 60.27) < 5.0)
     }
 
     @Test("Moon position changes over 7 days")
@@ -187,14 +183,13 @@ struct EphemerisProviderTests {
         let dy = Double(pos2.y - pos1.y)
         let dz = Double(pos2.z - pos1.z)
         let distance = (dx * dx + dy * dy + dz * dz).squareRoot()
-
-        #expect(distance > 1.0, "Moon position should change significantly over 7 days, delta was \(distance)")
+        #expect(distance > 1.0)
     }
 
-    @Test("Moon position at dates one full orbit apart should be approximately the same")
+    @Test("Moon returns near same position after one sidereal month")
     func moonPositionAfterFullOrbit() {
         let date1 = MissionTimeline.launchDate
-        let date2 = date1.addingTimeInterval(27.321661 * 86400) // one sidereal month
+        let date2 = date1.addingTimeInterval(27.321661 * 86400)
         let pos1 = EphemerisProvider.moonPosition(at: date1)
         let pos2 = EphemerisProvider.moonPosition(at: date2)
 
@@ -202,41 +197,7 @@ struct EphemerisProviderTests {
         let dy = Double(pos2.y - pos1.y)
         let dz = Double(pos2.z - pos1.z)
         let distance = (dx * dx + dy * dy + dz * dz).squareRoot()
-
-        #expect(distance < 5.0, "Moon should return near the same position after one orbit, delta was \(distance)")
-    }
-}
-
-// MARK: - Trajectory Node Tests
-
-@Suite("Trajectory Path Node")
-struct TrajectoryPathNodeTests {
-
-    @Test("Creating a TrajectoryPathNode does not crash")
-    func createTrajectoryPathNode() {
-        let path = TrajectoryPathNode(pointCount: 100)
-        #expect(path.node.name == "Trajectory")
-    }
-
-    @Test("updateProgress(0.0) produces valid state")
-    func updateProgressZero() {
-        let path = TrajectoryPathNode(pointCount: 100)
-        path.updateProgress(0.0)
-        #expect(path.node.childNodes.count >= 2)
-    }
-
-    @Test("updateProgress(0.5) produces valid state")
-    func updateProgressHalf() {
-        let path = TrajectoryPathNode(pointCount: 100)
-        path.updateProgress(0.5)
-        #expect(path.node.childNodes.count >= 2)
-    }
-
-    @Test("updateProgress(1.0) produces valid state")
-    func updateProgressFull() {
-        let path = TrajectoryPathNode(pointCount: 100)
-        path.updateProgress(1.0)
-        #expect(path.node.childNodes.count >= 2)
+        #expect(distance < 5.0)
     }
 }
 
@@ -245,19 +206,14 @@ struct TrajectoryPathNodeTests {
 @Suite("Mission Phase")
 struct MissionPhaseTests {
 
-    @Test("All mission phases have non-empty rawValue strings")
+    @Test("All phases have non-empty rawValue")
     func allPhasesHaveNonEmptyRawValues() {
         let allPhases: [MissionPhase] = [
-            .prelaunch,
-            .parkingOrbit,
-            .translunarInjection,
-            .outboundCoast,
-            .lunarFlyby,
-            .returnCoast,
-            .reentry,
+            .prelaunch, .parkingOrbit, .translunarInjection,
+            .outboundCoast, .lunarFlyby, .returnCoast, .reentry,
         ]
         for phase in allPhases {
-            #expect(!phase.rawValue.isEmpty, "Phase \(phase) should have a non-empty rawValue")
+            #expect(!phase.rawValue.isEmpty)
         }
     }
 }

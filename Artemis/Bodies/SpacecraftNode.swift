@@ -1,57 +1,71 @@
 import SceneKit
 
-final class SpacecraftNode: SCNNode {
+enum SpacecraftBuilder {
 
-    // MARK: - Convenience Init
+    static func build() -> SCNNode {
+        let spacecraft = SCNNode()
+        spacecraft.name = "Spacecraft"
 
-    convenience init(radius: CGFloat = 0.15) {
-        self.init()
-        name = "Spacecraft"
+        let teal = UIColor(red: 0.0, green: 0.9, blue: 0.85, alpha: 1.0)
 
         // --- Core dot ---
-        let coreSphere = SCNSphere(radius: radius)
+        let coreSphere = SCNSphere(radius: 0.12)
         coreSphere.segmentCount = 24
 
+        let purple = UIColor(red: 0.9, green: 0.2, blue: 0.6, alpha: 1.0)
         let coreMaterial = SCNMaterial()
-        coreMaterial.name = "spacecraftCore"
-        coreMaterial.diffuse.contents = UIColor(red: 1.0, green: 0.85, blue: 0.5, alpha: 1.0)
-        coreMaterial.emission.contents = UIColor.white
+        coreMaterial.diffuse.contents = purple
+        coreMaterial.emission.contents = purple
+        coreMaterial.lightingModel = .constant
         coreSphere.materials = [coreMaterial]
 
         let coreNode = SCNNode(geometry: coreSphere)
         coreNode.name = "spacecraftCore"
-        addChildNode(coreNode)
+        spacecraft.addChildNode(coreNode)
 
-        // --- Outer glow ---
-        let glowSphere = SCNSphere(radius: 0.5)
-        glowSphere.segmentCount = 24
+        // --- Concentric ring pulses ---
+        for i in 0..<4 {
+            let ringNode = makeRing(index: i, color: teal)
+            spacecraft.addChildNode(ringNode)
+        }
 
-        let glowMaterial = SCNMaterial()
-        glowMaterial.name = "spacecraftGlow"
-        glowMaterial.diffuse.contents = UIColor(red: 1.0, green: 0.7, blue: 0.3, alpha: 0.25)
-        glowMaterial.blendMode = .add
-        glowMaterial.isDoubleSided = true
-        glowMaterial.writesToDepthBuffer = false
-        glowSphere.materials = [glowMaterial]
-
-        let glowNode = SCNNode(geometry: glowSphere)
-        glowNode.name = "spacecraftGlow"
-        addChildNode(glowNode)
-
-        // --- Pulsing animation ---
-        let scaleUp = SCNAction.scale(to: 1.2, duration: 0.75)
-        scaleUp.timingMode = .easeInEaseOut
-
-        let scaleDown = SCNAction.scale(to: 0.8, duration: 0.75)
-        scaleDown.timingMode = .easeInEaseOut
-
-        let pulse = SCNAction.repeatForever(SCNAction.sequence([scaleUp, scaleDown]))
-        glowNode.runAction(pulse, forKey: "glowPulse")
+        return spacecraft
     }
 
-    // MARK: - Public API
+    private static func makeRing(index: Int, color: UIColor) -> SCNNode {
+        let torus = SCNTorus(ringRadius: 0.4, pipeRadius: 0.015)
+        torus.ringSegmentCount = 48
+        torus.pipeSegmentCount = 8
 
-    func updatePosition(_ position: SCNVector3) {
-        self.position = position
+        let material = SCNMaterial()
+        material.diffuse.contents = color.withAlphaComponent(0.85)
+        material.emission.contents = color.withAlphaComponent(0.85)
+        material.lightingModel = .constant
+        material.blendMode = .add
+        material.writesToDepthBuffer = false
+        torus.materials = [material]
+
+        let node = SCNNode(geometry: torus)
+        node.name = "ring\(index)"
+        // Rotate torus to face camera (lay flat in XY plane)
+        node.eulerAngles.x = .pi / 2
+
+        // Staggered pulse animation (slow, gentle ripple)
+        let delay = Double(index) * 1.8
+        let expandAndFade = SCNAction.group([
+            SCNAction.scale(to: 4.0, duration: 5.5),
+            SCNAction.fadeOut(duration: 5.5)
+        ])
+        let reset = SCNAction.group([
+            SCNAction.scale(to: 0.8, duration: 0),
+            SCNAction.fadeIn(duration: 0)
+        ])
+        let pulse = SCNAction.sequence([
+            SCNAction.wait(duration: delay),
+            SCNAction.repeatForever(SCNAction.sequence([expandAndFade, reset]))
+        ])
+        node.runAction(pulse, forKey: "ringPulse\(index)")
+
+        return node
     }
 }

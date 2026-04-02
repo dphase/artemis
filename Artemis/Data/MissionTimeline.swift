@@ -27,14 +27,14 @@ struct MissionTimeline {
 
     // MARK: Key Dates
 
-    /// Placeholder launch date (update when NASA announces the real date).
+    /// Artemis II launched April 1, 2026 at 6:36 PM EDT (22:36 UTC) after brief technical delay.
     static let launchDate: Date = {
         var components = DateComponents()
         components.year = 2026
-        components.month = 9
+        components.month = 4
         components.day = 1
-        components.hour = 12
-        components.minute = 0
+        components.hour = 22
+        components.minute = 36
         components.second = 0
         components.timeZone = TimeZone(identifier: "UTC")
         return Calendar(identifier: .gregorian).date(from: components)!
@@ -287,6 +287,23 @@ struct MissionTimeline {
             ))
         }
 
-        return wp
+        return rotateWaypointsToMoon(wp)
     }()
+
+    /// Rotates waypoints -90° so the trajectory's Moon target (originally on +X)
+    /// appears at -Y, placing it below Earth on a portrait screen.
+    private static func rotateWaypointsToMoon(_ wp: [TrajectoryWaypoint]) -> [TrajectoryWaypoint] {
+        // -90° rotation: cos=-0, sin=-1 → new_x = y, new_y = -x
+        return wp.map { w in
+            let px = w.position.y
+            let py = -w.position.x
+            let vx = w.velocity.y
+            let vy = -w.velocity.x
+            return TrajectoryWaypoint(
+                time: w.time,
+                position: SIMD3<Float>(px, py, w.position.z),
+                velocity: SIMD3<Float>(vx, vy, w.velocity.z)
+            )
+        }
+    }
 }

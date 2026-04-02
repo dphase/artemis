@@ -1,78 +1,125 @@
 import SceneKit
 
-final class TrajectoryNode: SCNNode {
+final class TrajectoryPathNode {
 
-    // MARK: - Properties
-
-    private var trajectoryPoints: [SCNVector3] = []
+    let node: SCNNode
+    private let trajectoryPoints: [SCNVector3]
     private let pastPathNode = SCNNode()
     private let futurePathNode = SCNNode()
+    // Duplicate layers offset slightly for visual line thickening
+    private let pastPathNode2 = SCNNode()
+    private let futurePathNode2 = SCNNode()
+    private let lineOffset = SCNVector3(0.015, 0.015, 0.015)
 
-    // MARK: - Convenience Init
+    init(pointCount: Int = 1200) {
+        node = SCNNode()
+        node.name = "Trajectory"
 
-    convenience init(pointCount: Int = 1200) {
-        self.init()
-        name = "Trajectory"
-
-        let points = TrajectoryInterpolator.trajectoryPoints(count: pointCount)
-        self.trajectoryPoints = points
+        trajectoryPoints = TrajectoryInterpolator.trajectoryPoints(count: pointCount)
 
         pastPathNode.name = "pastPath"
         futurePathNode.name = "futurePath"
-        addChildNode(pastPathNode)
-        addChildNode(futurePathNode)
+        pastPathNode2.name = "pastPath2"
+        futurePathNode2.name = "futurePath2"
+        pastPathNode2.position = lineOffset
+        futurePathNode2.position = lineOffset
+        node.addChildNode(pastPathNode)
+        node.addChildNode(futurePathNode)
+        node.addChildNode(pastPathNode2)
+        node.addChildNode(futurePathNode2)
 
-        // Start with the full path shown as future
         updateProgress(0)
     }
 
-    // MARK: - Public API
-
-    /// Updates the past/future trajectory split.
-    /// - Parameter parameter: A value in 0...1 representing mission progress.
     func updateProgress(_ parameter: Double) {
+        guard !trajectoryPoints.isEmpty else { return }
+
         let clampedParameter = min(max(parameter, 0), 1)
         let splitIndex = Int(Double(trajectoryPoints.count - 1) * clampedParameter)
 
-        // Past path: from start through the split point (inclusive)
         if splitIndex > 0 {
             let pastPoints = Array(trajectoryPoints[0...splitIndex])
-            pastPathNode.geometry = createLineGeometry(from: pastPoints)
+            let geo = createFadingLineGeometry(from: pastPoints)
 
             let pastMaterial = SCNMaterial()
-            pastMaterial.name = "pastTrajectory"
-            pastMaterial.diffuse.contents = UIColor(red: 0.5, green: 0.3, blue: 0.8, alpha: 0.6)
             pastMaterial.lightingModel = .constant
+            pastPathNode.geometry = geo
             pastPathNode.geometry?.materials = [pastMaterial]
+
+            // Duplicate for thickness
+            let geo2 = createFadingLineGeometry(from: pastPoints)
+            let pastMaterial2 = SCNMaterial()
+            pastMaterial2.lightingModel = .constant
+            pastPathNode2.geometry = geo2
+            pastPathNode2.geometry?.materials = [pastMaterial2]
         } else {
             pastPathNode.geometry = nil
+            pastPathNode2.geometry = nil
         }
 
-        // Future path: from split point to end
         if splitIndex < trajectoryPoints.count - 1 {
             let futurePoints = Array(trajectoryPoints[splitIndex...])
-            futurePathNode.geometry = createLineGeometry(from: futurePoints)
 
             let futureMaterial = SCNMaterial()
-            futureMaterial.name = "futureTrajectory"
-            futureMaterial.diffuse.contents = UIColor(white: 0.5, alpha: 0.3)
+            futureMaterial.diffuse.contents = UIColor(red: 0.75, green: 0.72, blue: 0.55, alpha: 0.5)
             futureMaterial.lightingModel = .constant
+            futurePathNode.geometry = createLineGeometry(from: futurePoints)
             futurePathNode.geometry?.materials = [futureMaterial]
+
+            // Duplicate for thickness
+            let futureMaterial2 = SCNMaterial()
+            futureMaterial2.diffuse.contents = UIColor(red: 0.75, green: 0.72, blue: 0.55, alpha: 0.5)
+            futureMaterial2.lightingModel = .constant
+            futurePathNode2.geometry = createLineGeometry(from: futurePoints)
+            futurePathNode2.geometry?.materials = [futureMaterial2]
         } else {
             futurePathNode.geometry = nil
+            futurePathNode2.geometry = nil
         }
     }
 
-    // MARK: - Helpers
+    private func createFadingLineGeometry(from points: [SCNVector3]) -> SCNGeometry? {
+        guard points.count >= 2 else { return nil }
 
-    /// Creates a line-strip geometry from an array of points.
+        let source = SCNGeometrySource(vertices: points)
+
+        // Per-vertex colors: fade from dim at start to bright magenta at end (spacecraft)
+        var colors: [SIMD4<Float>] = []
+        colors.reserveCapacity(points.count)
+        for i in 0..<points.count {
+            let t = Float(i) / Float(points.count - 1)
+            let alpha = t * t // quadratic fade-in
+            let bright = max(alpha, 0.15) // minimum brightness so trail is more visible
+            colors.append(SIMD4<Float>(0.9 * bright, 0.2 * bright, 0.6 * bright, bright))
+        }
+        let colorData = Data(bytes: colors, count: colors.count * MemoryLayout<SIMD4<Float>>.stride)
+        let colorSource = SCNGeometrySource(
+            data: colorData,
+            semantic: .color,
+            vectorCount: colors.count,
+            usesFloatComponents: true,
+            componentsPerVector: 4,
+            bytesPerComponent: MemoryLayout<Float>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<SIMD4<Float>>.stride
+        )
+
+        var indices: [UInt32] = []
+        indices.reserveCapacity((points.count - 1) * 2)
+        for i in 0..<(points.count - 1) {
+            indices.append(UInt32(i))
+            indices.append(UInt32(i + 1))
+        }
+
+        let element = SCNGeometryElement(indices: indices, primitiveType: .line)
+        return SCNGeometry(sources: [source, colorSource], elements: [element])
+    }
+
     private func createLineGeometry(from points: [SCNVector3]) -> SCNGeometry? {
         guard points.count >= 2 else { return nil }
 
-        // Vertex positions
         let source = SCNGeometrySource(vertices: points)
 
-        // Line-strip indices as pairs: [0,1, 1,2, 2,3, ...]
         var indices: [UInt32] = []
         indices.reserveCapacity((points.count - 1) * 2)
         for i in 0..<(points.count - 1) {
