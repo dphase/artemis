@@ -44,6 +44,14 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROVISIONING_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision
+          echo "Profile installed"
+
       - name: Write ExportOptions
         run: |
           mkdir -p build
@@ -54,7 +62,6 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :uploadSymbols bool true" build/ExportOptions.plist
           /usr/libexec/PlistBuddy -c "Add :destination string upload" build/ExportOptions.plist
           /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool true" build/ExportOptions.plist
-          cat build/ExportOptions.plist
 
       - name: Archive
         run: |
@@ -84,7 +91,9 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: rm -rf ~/.appstoreconnect
+        run: |
+          rm -rf ~/.appstoreconnect
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision
 
       - name: Summary
         run: |
