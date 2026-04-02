@@ -1,0 +1,30 @@
+name: Artemis
+options:
+  bundleIdPrefix: com.artemis
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  SWIFT_VERSION: "6.0"
+targets:
+  Artemis:
+    type: application
+    platform: iOS
+    sources:
+      - Artemis
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.artemis.tracker
+      GENERATE_INFOPLIST_FILE: YES
+      PRODUCT_NAME: Artemis
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+      SUPPORTS_MACCATALYST: NO
+  ArtemisTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ArtemisTests
+    dependencies:
+      - target: Artemis
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
