@@ -44,31 +44,7 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
-      - name: Install provisioning profile
-        env:
-          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
-        run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$PROVISIONING_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision
-          # Extract UUID for manual signing
-          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision)")
-          echo "PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
-          echo "Profile installed: $UUID"
-
-      - name: Write ExportOptions
-        run: |
-          mkdir -p build
-          /usr/libexec/PlistBuddy -c "Clear dict" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :teamID string ${{ secrets.TEAM_ID }}" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :uploadSymbols bool true" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :destination string upload" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :signingStyle string manual" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:com.project93.artemis string iOS Team Store Provisioning Profile: com.project93.artemis" build/ExportOptions.plist
-          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool true" build/ExportOptions.plist
-
-      - name: Archive
+      - name: Archive (unsigned)
         run: |
           xcodebuild -project Artemis.xcodeproj \
             -scheme Artemis \
@@ -76,14 +52,20 @@ jobs:
             -configuration Release \
             -archivePath build/Artemis.xcarchive \
             archive \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=${{ secrets.TEAM_ID }} \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="iOS Team Store Provisioning Profile: com.project93.artemis" \
-            -allowProvisioningUpdates \
-            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
-            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
-            -authenticationKeyPath ~/".appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Write ExportOptions
+        run: |
+          mkdir -p build
+          /usr/libexec/PlistBuddy -c "Clear dict" build/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" build/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :teamID string ${{ secrets.TEAM_ID }}" build/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic" build/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :uploadSymbols bool true" build/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :destination string upload" build/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool true" build/ExportOptions.plist
 
       - name: Export and upload to TestFlight
         run: |
@@ -98,9 +80,7 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: |
-          rm -rf ~/.appstoreconnect
-          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision
+        run: rm -rf ~/.appstoreconnect
 
       - name: Summary
         run: |
