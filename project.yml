@@ -2,7 +2,7 @@ name: Artemis
 options:
   bundleIdPrefix: com.project93
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "17.0"
 settings:
   SWIFT_VERSION: "6.0"
 targets:
