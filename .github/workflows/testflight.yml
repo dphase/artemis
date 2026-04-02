@@ -44,7 +44,7 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
-      - name: Archive (unsigned)
+      - name: Archive
         run: |
           xcodebuild -project Artemis.xcodeproj \
             -scheme Artemis \
@@ -52,11 +52,14 @@ jobs:
             -configuration Release \
             -archivePath build/Artemis.xcarchive \
             archive \
-            CODE_SIGN_IDENTITY=- \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=${{ secrets.TEAM_ID }} \
+            -allowProvisioningUpdates \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            -authenticationKeyPath ~/".appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
 
-      - name: Write ExportOptions
+      - name: Export and upload to TestFlight
         run: |
           mkdir -p build
           /usr/libexec/PlistBuddy -c "Clear dict" build/ExportOptions.plist
@@ -67,8 +70,6 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :destination string upload" build/ExportOptions.plist
           /usr/libexec/PlistBuddy -c "Add :manageAppVersionAndBuildNumber bool true" build/ExportOptions.plist
 
-      - name: Export and upload to TestFlight
-        run: |
           xcodebuild -exportArchive \
             -archivePath build/Artemis.xcarchive \
             -exportOptionsPlist build/ExportOptions.plist \
