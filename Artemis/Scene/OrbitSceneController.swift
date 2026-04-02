@@ -1,5 +1,6 @@
 import SceneKit
 
+@MainActor
 final class OrbitSceneController: ObservableObject {
 
     @Published private(set) var spacecraftDistanceFromEarth: Double = 0
