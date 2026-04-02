@@ -75,7 +75,7 @@ struct HUDView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .glassEffect(.clear, in: .capsule)
+                    .modifier(GlassModifier(shape: .capsule))
             }
 
             HStack {
@@ -91,7 +91,7 @@ struct HUDView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
-        .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 12))
+        .modifier(GlassModifier(shape: .rect(cornerRadius: 12), interactive: true))
         .padding(.horizontal)
     }
 }
