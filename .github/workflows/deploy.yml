@@ -1,0 +1,89 @@
+name: Deploy to App Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number (must be higher than previous upload)"
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Set build number
+        run: |
+          sed -i '' "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: ${{ inputs.build_number }}/" project.yml
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Write API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+
+      - name: Archive
+        run: |
+          xcodebuild -project Artemis.xcodeproj \
+            -scheme Artemis \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath build/Artemis.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=${{ secrets.TEAM_ID }} \
+            -allowProvisioningUpdates \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            -authenticationKeyPath ~/".appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
+
+      - name: Export IPA
+        run: |
+          cat > build/ExportOptions.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>${{ secrets.TEAM_ID }}</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath build/Artemis.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/Export \
+            -allowProvisioningUpdates \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
+            -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
+            -authenticationKeyPath ~/".appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
+
+      - name: Upload to App Store Connect
+        run: |
+          xcrun altool --upload-app \
+            -f build/Export/ArtemisTrack.ipa \
+            -t ios \
+            --apiKey ${{ secrets.ASC_KEY_ID }} \
+            --apiIssuer ${{ secrets.ASC_ISSUER_ID }}
+
+      - name: Clean up
+        if: always()
+        run: rm -rf ~/.appstoreconnect
