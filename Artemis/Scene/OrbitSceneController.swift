@@ -1,4 +1,4 @@
-import SceneKit
+@preconcurrency import SceneKit
 
 @MainActor
 final class OrbitSceneController: ObservableObject {

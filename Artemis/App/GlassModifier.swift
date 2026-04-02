@@ -7,8 +7,9 @@ struct GlassModifier<S: Shape>: ViewModifier {
     var interactive: Bool = false
 
     func body(content: Content) -> some View {
-#if canImport(Observation, _version: 1.3)
-        // Observation 1.3 ships with iOS 26 SDK (Xcode 26) — use as SDK gate
+        // FoundationModels is iOS 26+ only — this guarantees the glassEffect
+        // API exists in the SDK. Xcode 16 (iOS 18.x SDK) skips this block.
+#if canImport(FoundationModels)
         if #available(iOS 26, *) {
             if interactive {
                 content.glassEffect(.clear.interactive(), in: shape)
