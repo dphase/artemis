@@ -48,7 +48,7 @@ jobs:
             -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
             -authenticationKeyPath ~/".appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
 
-      - name: Export IPA
+      - name: Export and upload to App Store Connect
         run: |
           cat > build/ExportOptions.plist << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -63,6 +63,8 @@ jobs:
             <string>automatic</string>
             <key>uploadSymbols</key>
             <true/>
+            <key>destination</key>
+            <string>upload</string>
           </dict>
           </plist>
           PLIST
@@ -75,14 +77,6 @@ jobs:
             -authenticationKeyID ${{ secrets.ASC_KEY_ID }} \
             -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }} \
             -authenticationKeyPath ~/".appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8"
-
-      - name: Upload to App Store Connect
-        run: |
-          xcrun altool --upload-app \
-            -f build/Export/ArtemisTrack.ipa \
-            -t ios \
-            --apiKey ${{ secrets.ASC_KEY_ID }} \
-            --apiIssuer ${{ secrets.ASC_ISSUER_ID }}
 
       - name: Clean up
         if: always()

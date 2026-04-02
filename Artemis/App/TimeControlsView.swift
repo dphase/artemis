@@ -3,6 +3,7 @@ import SwiftUI
 struct TimeControlsView: View {
     @Binding var isPlaying: Bool
     @Binding var missionTime: Date
+    var onResetToNow: (() -> Void)?
 
     private var sliderRange: ClosedRange<Double> {
         let start = MissionTimeline.launchDate.timeIntervalSinceReferenceDate
@@ -41,6 +42,7 @@ struct TimeControlsView: View {
                     missionTime = now
                 }
                 isPlaying = true
+                onResetToNow?()
             } label: {
                 Image(systemName: "location.fill")
                     .font(.caption)

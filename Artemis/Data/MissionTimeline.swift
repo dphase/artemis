@@ -105,23 +105,35 @@ struct MissionTimeline {
         var wp: [TrajectoryWaypoint] = []
 
         // -----------------------------------------------------------
-        // 1. Parking orbit: ~2 LEO revolutions at radius 1.05
-        //    LEO period ~90 min; place waypoints every ~30 min
+        // 1. Parking orbit: ~1.5 LEO revolutions at radius 1.05
+        //    LEO period ~90 min; 28.5° inclination (KSC latitude)
+        //    Waypoints every 5 minutes for clear orbital loops
         // -----------------------------------------------------------
         let leoR: Float = 1.05
-        let leoAngularRate: Float = 2 * .pi / (90 * 60) // rad/s
-        let parkingCount = 5
+        let leoPeriod: Float = 90 * 60 // 90 minutes in seconds
+        let leoAngularRate: Float = 2 * .pi / leoPeriod
+        let incl: Float = 28.5 * .pi / 180.0 // orbit inclination matching KSC
+
+        let parkingDuration: TimeInterval = 2.0 * hr // ~1.33 orbits
+        let parkingStep: TimeInterval = 5 * 60 // every 5 minutes
+        let parkingCount = Int(parkingDuration / parkingStep) + 1
         for i in 0..<parkingCount {
-            let t = TimeInterval(i) * 30 * 60 // every 30 minutes
+            let t = TimeInterval(i) * parkingStep
             let angle = leoAngularRate * Float(t)
+
+            // Inclined orbit: tilt the circle 28.5° from the XY plane
             let x = leoR * cos(angle)
-            let y = leoR * sin(angle)
-            let vx = -leoR * leoAngularRate * sin(angle) * 1000 // scale for visual
-            let vy = leoR * leoAngularRate * cos(angle) * 1000
+            let y = leoR * sin(angle) * cos(incl)
+            let z = leoR * sin(angle) * sin(incl)
+
+            let vx = -leoR * leoAngularRate * sin(angle) * 1000
+            let vy = leoR * leoAngularRate * cos(angle) * cos(incl) * 1000
+            let vz = leoR * leoAngularRate * cos(angle) * sin(incl) * 1000
+
             wp.append(TrajectoryWaypoint(
                 time: t,
-                position: SIMD3<Float>(x, y, 0.02),
-                velocity: SIMD3<Float>(vx, vy, 0)
+                position: SIMD3<Float>(x, y, z),
+                velocity: SIMD3<Float>(vx, vy, vz)
             ))
         }
 
@@ -130,48 +142,51 @@ struct MissionTimeline {
         // -----------------------------------------------------------
         let tliTime = 2.0 * hr
         let tliAngle = leoAngularRate * Float(tliTime)
+        let tliX = leoR * cos(tliAngle)
+        let tliY = leoR * sin(tliAngle) * cos(incl)
+        let tliZ = leoR * sin(tliAngle) * sin(incl)
         wp.append(TrajectoryWaypoint(
             time: tliTime,
-            position: SIMD3<Float>(leoR * cos(tliAngle), leoR * sin(tliAngle), 0.03),
+            position: SIMD3<Float>(tliX, tliY, tliZ),
             velocity: SIMD3<Float>(2.0, 0.5, 0.1)
         ))
 
         // -----------------------------------------------------------
         // 3. Outbound coast: smooth arc from near-Earth to Moon (~4 days)
-        //    Use a parametric curve that arcs in Y and Z.
+        //    Start position connects from TLI exit point.
         // -----------------------------------------------------------
         let outboundStart = 2.5 * hr
         let outboundEnd = 4.0 * day
         let outboundCount = 12
+
+        // TLI exit: slightly ahead of the TLI burn position, pushed outward
+        let outStartAngle = leoAngularRate * Float(2.5 * hr)
+        let outStartX: Float = 1.5 * cos(outStartAngle)
+        let outStartY: Float = 1.5 * sin(outStartAngle) * cos(incl)
+        let outStartZ: Float = 1.5 * sin(outStartAngle) * sin(incl)
+
         for i in 0..<outboundCount {
             let frac = Double(i) / Double(outboundCount - 1)
             let t = outboundStart + frac * (outboundEnd - outboundStart)
 
-            // Parametric position: cubic ease from Earth vicinity to Moon vicinity
             let f = Float(frac)
             let easeF = f * f * (3 - 2 * f) // smoothstep
-
-            // Start near TLI exit point
-            let startX: Float = 1.5
-            let startY: Float = 0.8
-            let startZ: Float = 0.1
 
             let endX: Float = moonX + flybyRadius * 0.5
             let endY: Float = moonY + 2.0
             let endZ: Float = moonZ + 0.5
 
             // Arc: add a Y bulge for the curved trajectory
-            let arcY: Float = 8.0 * f * (1 - f) // peaks at midpoint
+            let arcY: Float = 8.0 * f * (1 - f)
             let arcZ: Float = 2.0 * f * (1 - f)
 
-            let x = startX + (endX - startX) * easeF
-            let y = startY + (endY - startY) * easeF + arcY
-            let z = startZ + (endZ - startZ) * easeF + arcZ
+            let x = outStartX + (endX - outStartX) * easeF
+            let y = outStartY + (endY - outStartY) * easeF + arcY
+            let z = outStartZ + (endZ - outStartZ) * easeF + arcZ
 
-            // Approximate velocity as direction of travel (will be refined by interpolator)
-            let vx = (endX - startX) * 0.01
-            let vy = (endY - startY) * 0.01 + 8.0 * (1 - 2 * f) * 0.01
-            let vz = (endZ - startZ) * 0.01
+            let vx = (endX - outStartX) * 0.01
+            let vy = (endY - outStartY) * 0.01 + 8.0 * (1 - 2 * f) * 0.01
+            let vz = (endZ - outStartZ) * 0.01
 
             wp.append(TrajectoryWaypoint(
                 time: t,
