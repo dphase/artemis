@@ -61,16 +61,15 @@ struct ContentView: View {
 
             // Splash screen overlay
             if showSplash {
-                GeometryReader { geo in
-                    Image("SplashImage")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                }
-                .ignoresSafeArea()
-                .transition(.opacity)
-                .onTapGesture { dismissSplash() }
+                Color(red: 0.02, green: 0.05, blue: 0.12)
+                    .ignoresSafeArea()
+                    .overlay {
+                        Image("SplashImage")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    }
+                    .transition(.opacity)
+                    .onTapGesture { dismissSplash() }
             }
         }
         .onReceive(timer) { _ in

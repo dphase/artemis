@@ -8,15 +8,17 @@ enum SpacecraftBuilder {
 
         let teal = UIColor(red: 0.0, green: 0.9, blue: 0.85, alpha: 1.0)
 
-        // --- Core dot ---
+        // --- Core dot (3D shaded sphere) ---
         let coreSphere = SCNSphere(radius: 0.12)
         coreSphere.segmentCount = 24
 
         let purple = UIColor(red: 0.9, green: 0.2, blue: 0.6, alpha: 1.0)
         let coreMaterial = SCNMaterial()
         coreMaterial.diffuse.contents = purple
-        coreMaterial.emission.contents = purple
-        coreMaterial.lightingModel = .constant
+        coreMaterial.emission.contents = UIColor(red: 0.45, green: 0.1, blue: 0.3, alpha: 1.0)
+        coreMaterial.specular.contents = UIColor(white: 0.8, alpha: 1.0)
+        coreMaterial.shininess = 30
+        coreMaterial.lightingModel = .blinn
         coreSphere.materials = [coreMaterial]
 
         let coreNode = SCNNode(geometry: coreSphere)

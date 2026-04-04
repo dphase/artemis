@@ -20,8 +20,24 @@ final class OrbitSceneController: ObservableObject {
     private let starfieldNode: SCNNode
     private let earthSurfaceNode: SCNNode
 
-    /// Fixed Moon position in scene coordinates (matches trajectory target after rotation)
-    private let fixedMoonPosition = SCNVector3(0, -58.5, 3)
+    /// Moon orbital radius at flyby (~63.5 ER, spacecraft passes far side at ~64.85 ER)
+    private static let moonOrbitRadius: Float = 63.5
+    private static let lunarPeriod: TimeInterval = 27.321661 * 86400
+
+    /// Computes the Moon's scene position for a given date.
+    /// The Moon orbits counter-clockwise and is at (0, -R, ~0) at flyby midpoint.
+    /// Flyby occurs ~5.02 days after launch based on NASA OEM tracking data.
+    private static func moonScenePosition(for date: Date) -> SCNVector3 {
+        let flybyMidpoint = MissionTimeline.launchDate.addingTimeInterval(5.02 * 86400)
+        let elapsed = date.timeIntervalSince(flybyMidpoint)
+        let angle = Float(2 * .pi * elapsed / lunarPeriod)
+
+        let R = moonOrbitRadius
+        let x = R * sin(angle)
+        let y = -R * cos(angle)
+        let z: Float = 1.5 * cos(angle)
+        return SCNVector3(x, y, z)
+    }
 
     init() {
         let s = SCNScene()
@@ -77,10 +93,13 @@ final class OrbitSceneController: ObservableObject {
 
         let earthSurface = earth.childNode(withName: "earthSurface", recursively: false)!
 
-        // --- Moon at fixed position (lower center) ---
+        // --- Moon (positioned dynamically in update) ---
         let moon = MoonBuilder.build()
-        moon.position = SCNVector3(0, -58.5, 3)
+        moon.position = SCNVector3(0, -63.5, 1.5)
         s.rootNode.addChildNode(moon)
+
+        // --- Moon orbital path (thin dotted grey line) ---
+        s.rootNode.addChildNode(Self.buildMoonOrbitPath())
 
         // --- Spacecraft ---
         let sc = SpacecraftBuilder.build()
@@ -131,9 +150,13 @@ final class OrbitSceneController: ObservableObject {
         // Sync Earth rotation to the current date
         earthSurfaceNode.eulerAngles.y = EarthBuilder.rotationAngle(for: date)
 
+        // Move Moon along its orbit
+        let currentMoonPos = Self.moonScenePosition(for: date)
+        moonNode.position = currentMoonPos
+
         // Telemetry
         spacecraftDistanceFromEarth = Self.distance(from: state.position, to: SCNVector3Zero)
-        spacecraftDistanceFromMoon = Self.distance(from: state.position, to: fixedMoonPosition)
+        spacecraftDistanceFromMoon = Self.distance(from: state.position, to: currentMoonPos)
         spacecraftVelocity = state.speed
 
         // Slowly rotate starfield for visual effect
@@ -168,6 +191,44 @@ final class OrbitSceneController: ObservableObject {
         let dy = Double(a.y - b.y)
         let dz = Double(a.z - b.z)
         return (dx * dx + dy * dy + dz * dz).squareRoot()
+    }
+
+    /// Builds a solid light grey circle showing the Moon's orbital path.
+    /// Uses a thin SCNTube for visible thickness.
+    private static func buildMoonOrbitPath() -> SCNNode {
+        let R = moonOrbitRadius
+        let totalPoints = 360
+
+        var points: [SCNVector3] = []
+        points.reserveCapacity(totalPoints + 1)
+        for i in 0...totalPoints {
+            let angle = Float(i) / Float(totalPoints) * 2 * .pi
+            let x = R * sin(angle)
+            let y = -R * cos(angle)
+            let z: Float = 1.5 * cos(angle)
+            points.append(SCNVector3(x, y, z))
+        }
+
+        // Solid line — connect every consecutive point
+        var indices: [UInt32] = []
+        indices.reserveCapacity(totalPoints * 2)
+        for i in 0..<totalPoints {
+            indices.append(UInt32(i))
+            indices.append(UInt32(i + 1))
+        }
+
+        let source = SCNGeometrySource(vertices: points)
+        let element = SCNGeometryElement(indices: indices, primitiveType: .line)
+        let geometry = SCNGeometry(sources: [source], elements: [element])
+
+        let material = SCNMaterial()
+        material.diffuse.contents = UIColor(white: 0.74, alpha: 0.47)
+        material.lightingModel = .constant
+        geometry.materials = [material]
+
+        let node = SCNNode(geometry: geometry)
+        node.name = "moonOrbit"
+        return node
     }
 
     /// Builds RGB axis lines at the scene origin for debugging camera orientation.
