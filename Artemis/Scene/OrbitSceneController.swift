@@ -209,20 +209,67 @@ final class OrbitSceneController: ObservableObject {
         self.starfieldNode = starNode
     }
 
-    func resetCamera() {
-        guard let view = scnView else { return }
+    enum CameraTarget {
+        case overview, earth, moon, sun
+    }
 
-        // allowsCameraControl uses its own pointOfView copy, so we must
-        // animate that node back to our initial transform.
-        guard let pov = view.pointOfView else { return }
+    func focusOn(_ target: CameraTarget) {
+        guard let view = scnView, let pov = view.pointOfView else { return }
+
+        let position: SCNVector3
+        let lookAt: SCNVector3
+        let fov: CGFloat
+
+        switch target {
+        case .overview:
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 1.2
+            SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            pov.transform = initialCameraTransform
+            pov.camera?.fieldOfView = cameraNode.camera?.fieldOfView ?? 60
+            SCNTransaction.commit()
+            return
+
+        case .earth:
+            lookAt = SCNVector3Zero
+            position = SCNVector3(0, -3.5, 7.0)
+            fov = 60
+
+        case .moon:
+            let mp = moonNode.position
+            lookAt = mp
+            let dx = mp.x * 0.05
+            let dy = mp.y * 0.05
+            position = SCNVector3(mp.x - dx, mp.y - dy, mp.z + 5.0)
+            fov = 50
+
+        case .sun:
+            let sp = SCNVector3(30, 20, 80)
+            lookAt = sp
+            let dist: Float = 40
+            let mag = sqrt(sp.x * sp.x + sp.y * sp.y + sp.z * sp.z)
+            position = SCNVector3(sp.x - sp.x / mag * dist,
+                                  sp.y - sp.y / mag * dist,
+                                  sp.z - sp.z / mag * dist)
+            fov = 60
+        }
+
+        // Use a temporary node to compute the correct orientation via look(at:)
+        let tmp = SCNNode()
+        tmp.position = position
+        tmp.look(at: lookAt)
 
         SCNTransaction.begin()
-        SCNTransaction.animationDuration = 0.8
+        SCNTransaction.animationDuration = 1.2
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        pov.position = cameraNode.position
-        pov.eulerAngles = cameraNode.eulerAngles
-        pov.camera?.fieldOfView = cameraNode.camera?.fieldOfView ?? 60
+        pov.position = position
+        pov.orientation = tmp.orientation
+        pov.camera?.fieldOfView = fov
         SCNTransaction.commit()
+    }
+
+    func resetCamera() {
+        focusOn(.overview)
     }
 
     func update(for date: Date) {

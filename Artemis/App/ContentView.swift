@@ -39,7 +39,10 @@ struct ContentView: View {
                 TimeControlsView(
                     isPlaying: $isPlaying,
                     missionTime: $missionTime,
-                    onResetToNow: { sceneController.resetCamera() }
+                    onResetToNow: { sceneController.focusOn(.overview) },
+                    onFocusEarth: { sceneController.focusOn(.earth) },
+                    onFocusMoon: { sceneController.focusOn(.moon) },
+                    onFocusSun: { sceneController.focusOn(.sun) }
                 )
             }
             .opacity(showSplash ? 0 : 1)
@@ -105,6 +108,20 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             snapToNowIfPlaying()
             sceneController.update(for: missionTime)
+        }
+        .onChange(of: showSplash) { _, visible in
+            guard !visible else { return }
+            // After splash dismisses, check for screenshot launch arguments
+            let args = ProcessInfo.processInfo.arguments
+            let target: OrbitSceneController.CameraTarget? =
+                args.contains("--focus-earth") ? .earth :
+                args.contains("--focus-moon") ? .moon :
+                args.contains("--focus-sun") ? .sun : nil
+            if let target {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    sceneController.focusOn(target)
+                }
+            }
         }
     }
 

@@ -4,6 +4,9 @@ struct TimeControlsView: View {
     @Binding var isPlaying: Bool
     @Binding var missionTime: Date
     var onResetToNow: (() -> Void)?
+    var onFocusEarth: (() -> Void)?
+    var onFocusMoon: (() -> Void)?
+    var onFocusSun: (() -> Void)?
 
     private var sliderRange: ClosedRange<Double> {
         let start = MissionTimeline.launchDate.timeIntervalSinceReferenceDate
@@ -45,6 +48,31 @@ struct TimeControlsView: View {
                 onResetToNow?()
             } label: {
                 Image(systemName: "location.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+            }
+
+            Divider()
+                .frame(height: 16)
+                .overlay(Color.white.opacity(0.3))
+
+            Button { onFocusEarth?() } label: {
+                Image(systemName: "globe.americas.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+            }
+
+            Button { onFocusMoon?() } label: {
+                Image(systemName: "moon.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+            }
+
+            Button { onFocusSun?() } label: {
+                Image(systemName: "sun.max.fill")
                     .font(.caption)
                     .foregroundStyle(.white)
                     .frame(width: 28, height: 28)
