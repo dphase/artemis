@@ -97,11 +97,17 @@ final class OrbitSceneController: ObservableObject {
         starNode.name = "starfield"
         s.rootNode.addChildNode(starNode)
 
-        // --- Camera (fixed) ---
+        // --- Camera (fixed, HDR with bloom for Sun glow) ---
         let cam = SCNCamera()
         cam.zFar = 1000
         cam.zNear = 0.1
         cam.fieldOfView = 60
+        cam.wantsHDR = true
+        cam.bloomIntensity = 1.0
+        cam.bloomThreshold = 0.8
+        cam.bloomBlurRadius = 50.0
+        cam.wantsExposureAdaptation = false
+        cam.exposureOffset = 0
 
         let camNode = SCNNode()
         camNode.camera = cam
@@ -127,6 +133,44 @@ final class OrbitSceneController: ObservableObject {
         let ambientNode = SCNNode()
         ambientNode.light = ambientLight
         s.rootNode.addChildNode(ambientNode)
+
+        // --- Visible Sun (HDR bloom + thin diffraction spikes) ---
+        let sunVisual = SCNNode()
+        sunVisual.position = SCNVector3(30, 20, 80)
+
+        // White-hot core
+        let sunSphere = SCNSphere(radius: 1.0)
+        sunSphere.segmentCount = 24
+        let sunMat = SCNMaterial()
+        sunMat.diffuse.contents = UIColor.white
+        sunMat.emission.contents = UIColor(red: 1.0, green: 0.65, blue: 0.25, alpha: 1.0)
+        sunMat.emission.intensity = 10.0
+        sunMat.lightingModel = .constant
+        sunMat.writesToDepthBuffer = false
+        sunSphere.materials = [sunMat]
+        let sunCore = SCNNode(geometry: sunSphere)
+        sunVisual.addChildNode(sunCore)
+
+        // Soft glow billboard — single texture with natural, organic rays baked in
+        let glowTexture = Self.generateSunGlow(size: 512)
+        let glowPlane = SCNPlane(width: 30, height: 30)
+        let glowMat = SCNMaterial()
+        glowMat.diffuse.contents = glowTexture
+        glowMat.emission.contents = glowTexture
+        glowMat.emission.intensity = 1.2
+        glowMat.lightingModel = .constant
+        glowMat.blendMode = .add
+        glowMat.writesToDepthBuffer = false
+        glowMat.readsFromDepthBuffer = false
+        glowMat.isDoubleSided = true
+        glowPlane.materials = [glowMat]
+        let glowNode = SCNNode(geometry: glowPlane)
+        let bb = SCNBillboardConstraint()
+        bb.freeAxes = []
+        glowNode.constraints = [bb]
+        sunVisual.addChildNode(glowNode)
+
+        s.rootNode.addChildNode(sunVisual)
 
         // --- Earth at origin (upper center of screen) ---
         let earth = EarthBuilder.build()
@@ -236,6 +280,78 @@ final class OrbitSceneController: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    /// Generates an organic sun glow texture with natural-looking irregular rays.
+    private static func generateSunGlow(size: Int = 512) -> UIImage {
+        let cgSize = CGSize(width: size, height: size)
+        let renderer = UIGraphicsImageRenderer(size: cgSize)
+        srand48(7)
+        return renderer.image { context in
+            let ctx = context.cgContext
+            let center = CGFloat(size) / 2
+            let maxR = center
+
+            // Smooth radial glow
+            let glowSteps = 100
+            for i in (0..<glowSteps).reversed() {
+                let frac = CGFloat(i) / CGFloat(glowSteps)
+                let r = maxR * 0.45 * frac
+                let a = pow(1.0 - frac, 3.0) * 0.3
+                ctx.setFillColor(red: 1.0, green: 0.7 + 0.25 * (1.0 - frac),
+                                 blue: 0.2 + 0.35 * (1.0 - frac), alpha: a)
+                ctx.fillEllipse(in: CGRect(x: center - r, y: center - r,
+                                           width: r * 2, height: r * 2))
+            }
+
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+
+            // Organic rays — many overlapping soft strokes at irregular angles
+            let rayCount = 40
+            for _ in 0..<rayCount {
+                let angle = drand48() * 2.0 * .pi
+                let length = maxR * CGFloat(0.25 + drand48() * 0.65)
+                let width = CGFloat(1.5 + drand48() * 3.0)
+                let brightness = CGFloat(0.08 + drand48() * 0.15)
+
+                let cosA = CGFloat(cos(angle))
+                let sinA = CGFloat(sin(angle))
+
+                // Draw ray as series of fading dots
+                let steps = 40
+                for s in 0..<steps {
+                    let t = CGFloat(s) / CGFloat(steps)
+                    let dist = length * t
+                    let falloff = pow(1.0 - t, 2.5)
+                    let w = width * (1.0 + 1.5 * (1.0 - t))
+                    let a = falloff * brightness
+
+                    guard a > 0.003 else { continue }
+
+                    let px = center + dist * cosA
+                    let py = center + dist * sinA
+
+                    ctx.setFillColor(red: 1.0, green: 0.72 + 0.2 * (1.0 - t),
+                                     blue: 0.25 + 0.2 * (1.0 - t), alpha: a)
+                    ctx.fillEllipse(in: CGRect(x: px - w, y: py - w,
+                                               width: w * 2, height: w * 2))
+                }
+            }
+
+            // Bright center
+            for i in (0..<30).reversed() {
+                let frac = CGFloat(i) / 30.0
+                let r = maxR * 0.035 * frac
+                let a = pow(1.0 - frac, 2.0) * 0.8
+                ctx.setFillColor(red: 1.0, green: 0.9 + 0.1 * (1.0 - frac),
+                                 blue: 0.6 + 0.4 * (1.0 - frac), alpha: a)
+                ctx.fillEllipse(in: CGRect(x: center - r, y: center - r,
+                                           width: r * 2, height: r * 2))
+            }
+
+            ctx.restoreGState()
+        }
+    }
 
     private static func distance(from a: SCNVector3, to b: SCNVector3) -> Double {
         let dx = Double(a.x - b.x)
