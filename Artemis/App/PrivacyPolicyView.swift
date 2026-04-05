@@ -24,8 +24,17 @@ struct PrivacyPolicyView: View {
                     Text("Contact")
                         .font(.headline)
                     Text("If you have questions about this policy, contact us at privacy@project93.com.")
+
                 }
                 .padding()
+
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                    Text("Version \(version)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.bottom, 24)
+                }
             }
             .navigationTitle("Privacy Policy")
             .navigationBarTitleDisplayMode(.inline)

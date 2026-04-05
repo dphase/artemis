@@ -8,6 +8,11 @@ final class OrbitSceneController: ObservableObject {
     @Published private(set) var spacecraftVelocity: Double = 0
     @Published private(set) var cameraDebugString: String = ""
 
+    /// Smoothed velocity to avoid frame-to-frame jitter from spline derivatives
+    private var rawVelocityAccumulator: Double = 0
+    private var velocitySampleCount: Int = 0
+    private static let velocitySmoothingSamples = 8
+
     let scene: SCNScene
     let cameraNode: SCNNode
     private let initialCameraTransform: SCNMatrix4
@@ -20,9 +25,46 @@ final class OrbitSceneController: ObservableObject {
     private let starfieldNode: SCNNode
     private let earthSurfaceNode: SCNNode
 
-    /// Moon orbital radius at flyby (~63.5 ER, spacecraft passes far side at ~64.85 ER)
-    private static let moonOrbitRadius: Float = 63.5
-    private static let lunarPeriod: TimeInterval = 27.321661 * 86400
+    /// Nominal Moon orbital radius for orbit path rendering
+    private static let moonOrbitRadius: Float = 63.0
+    /// Effective period near apogee (Kepler: T_eff = T_sid * (r_apo/r_mean)^2 ≈ 30.3 days).
+    /// The Moon is near apogee (Apr 7) for the entire Artemis II window, so it moves ~10% slower.
+    private static let lunarPeriod: TimeInterval = 29.78 * 86400
+
+    /// JPL Horizons Earth-Moon distances (ER) during Artemis II mission, one per day from launch.
+    /// Source: NASA/JPL Horizons API, target=301, center=500@399
+    private static let moonDistancesER: [(daysSinceLaunch: Double, radiusER: Float)] = [
+        (0, 61.21),   // Apr 1 — launch
+        (1, 61.77),   // Apr 2
+        (2, 62.27),   // Apr 3
+        (3, 62.73),   // Apr 4
+        (4, 63.11),   // Apr 5
+        (5, 63.39),   // Apr 6 — flyby
+        (6, 63.54),   // Apr 7 — apogee
+        (7, 63.51),   // Apr 8
+        (8, 63.31),   // Apr 9
+        (9, 62.96),   // Apr 10 — splashdown
+    ]
+
+    /// Interpolates the Moon's distance from Earth (in ER) for a given date.
+    private static func moonRadius(for date: Date) -> Float {
+        let daysSinceLaunch = date.timeIntervalSince(MissionTimeline.launchDate) / 86400.0
+        let table = moonDistancesER
+
+        // Clamp to table range
+        if daysSinceLaunch <= table.first!.daysSinceLaunch { return table.first!.radiusER }
+        if daysSinceLaunch >= table.last!.daysSinceLaunch { return table.last!.radiusER }
+
+        // Linear interpolation between entries
+        for i in 0..<(table.count - 1) {
+            if daysSinceLaunch >= table[i].daysSinceLaunch && daysSinceLaunch < table[i + 1].daysSinceLaunch {
+                let t = Float((daysSinceLaunch - table[i].daysSinceLaunch) /
+                              (table[i + 1].daysSinceLaunch - table[i].daysSinceLaunch))
+                return table[i].radiusER + t * (table[i + 1].radiusER - table[i].radiusER)
+            }
+        }
+        return table.last!.radiusER
+    }
 
     /// Computes the Moon's scene position for a given date.
     /// The Moon orbits counter-clockwise and is at (0, -R, ~0) at flyby midpoint.
@@ -32,7 +74,7 @@ final class OrbitSceneController: ObservableObject {
         let elapsed = date.timeIntervalSince(flybyMidpoint)
         let angle = Float(2 * .pi * elapsed / lunarPeriod)
 
-        let R = moonOrbitRadius
+        let R = moonRadius(for: date)
         let x = R * sin(angle)
         let y = -R * cos(angle)
         let z: Float = 1.5 * cos(angle)
@@ -63,8 +105,8 @@ final class OrbitSceneController: ObservableObject {
 
         let camNode = SCNNode()
         camNode.camera = cam
-        camNode.position = SCNVector3(-0.7, -71.0, 24.1)
-        camNode.eulerAngles = SCNVector3(0.83, -0.03, 0.0)
+        camNode.position = SCNVector3(-0.6, -74.0, 12.3)
+        camNode.eulerAngles = SCNVector3(0.99, -0.05, 0.0)
         s.rootNode.addChildNode(camNode)
 
         // --- Lighting ---
@@ -154,10 +196,19 @@ final class OrbitSceneController: ObservableObject {
         let currentMoonPos = Self.moonScenePosition(for: date)
         moonNode.position = currentMoonPos
 
-        // Telemetry
-        spacecraftDistanceFromEarth = Self.distance(from: state.position, to: SCNVector3Zero)
-        spacecraftDistanceFromMoon = Self.distance(from: state.position, to: currentMoonPos)
-        spacecraftVelocity = state.speed
+        // Telemetry (surface-to-surface, not center-to-center)
+        let earthRadius: Double = 1.0       // 1 ER in scene units
+        let moonRadius: Double = 0.273      // Moon radius in scene units (matches MoonBuilder)
+        spacecraftDistanceFromEarth = max(0, Self.distance(from: state.position, to: SCNVector3Zero) - earthRadius)
+        spacecraftDistanceFromMoon = max(0, Self.distance(from: state.position, to: currentMoonPos) - moonRadius)
+        // Smooth velocity using rolling average to prevent jitter
+        rawVelocityAccumulator += state.speed
+        velocitySampleCount += 1
+        if velocitySampleCount >= Self.velocitySmoothingSamples {
+            spacecraftVelocity = rawVelocityAccumulator / Double(velocitySampleCount)
+            rawVelocityAccumulator = 0
+            velocitySampleCount = 0
+        }
 
         // Slowly rotate starfield for visual effect
         let elapsed = date.timeIntervalSince(MissionTimeline.launchDate)
@@ -222,7 +273,7 @@ final class OrbitSceneController: ObservableObject {
         let geometry = SCNGeometry(sources: [source], elements: [element])
 
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor(white: 0.74, alpha: 0.47)
+        material.diffuse.contents = UIColor(white: 0.81, alpha: 0.52)
         material.lightingModel = .constant
         geometry.materials = [material]
 

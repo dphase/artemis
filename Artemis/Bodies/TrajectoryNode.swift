@@ -17,14 +17,14 @@ final class TrajectoryPathNode {
     private let trailNode5 = SCNNode()
 
     // Glow/blur layers (multiple at varying offsets for soft bloom)
-    private let glowNodes: [SCNNode] = (0..<10).map { _ in SCNNode() }
+    private let glowNodes: [SCNNode] = (0..<14).map { _ in SCNNode() }
 
     // Future path (grey line showing where spacecraft will go)
     private let futurePathNode = SCNNode()
     private let futurePathNode2 = SCNNode()
 
     /// How many points of trail to show behind the spacecraft.
-    private let trailLength = 100
+    private let trailLength = 115
 
     init(pointCount: Int = 1200) {
         node = SCNNode()
@@ -44,10 +44,10 @@ final class TrajectoryPathNode {
         // Core trail layers (5 offsets for solid thickness)
         let coreOffsets: [SCNVector3] = [
             SCNVector3(0, 0, 0),
-            SCNVector3(0.015, 0.015, 0.015),
-            SCNVector3(-0.015, -0.015, -0.015),
-            SCNVector3(0.025, -0.01, 0.015),
-            SCNVector3(-0.01, 0.025, -0.015),
+            SCNVector3(0.02, 0.02, 0.02),
+            SCNVector3(-0.02, -0.02, -0.02),
+            SCNVector3(0.03, -0.01, 0.02),
+            SCNVector3(-0.01, 0.03, -0.02),
         ]
         let coreNodes = [trailNode, trailNode2, trailNode3, trailNode4, trailNode5]
         for (i, cn) in coreNodes.enumerated() {
@@ -56,18 +56,24 @@ final class TrajectoryPathNode {
             node.addChildNode(cn)
         }
 
-        // Glow layers at varying distances for soft blur effect
+        // Glow layers — very tight offsets to avoid visible parallel lines when zoomed in
         let glowOffsets: [SCNVector3] = [
-            SCNVector3(0.08, 0.08, 0.08),
-            SCNVector3(-0.08, -0.08, -0.08),
-            SCNVector3(0.08, -0.08, 0.0),
-            SCNVector3(-0.08, 0.08, 0.0),
-            SCNVector3(0.0, 0.08, -0.08),
-            SCNVector3(0.0, -0.08, 0.08),
-            SCNVector3(0.14, 0.14, 0.0),
-            SCNVector3(-0.14, -0.14, 0.0),
-            SCNVector3(0.0, 0.14, 0.14),
-            SCNVector3(0.0, -0.14, -0.14),
+            // Inner ring (6 directions)
+            SCNVector3( 0.025,  0.025,  0.025),
+            SCNVector3(-0.025, -0.025, -0.025),
+            SCNVector3( 0.025, -0.025,  0.0),
+            SCNVector3(-0.025,  0.025,  0.0),
+            SCNVector3( 0.0,    0.025, -0.025),
+            SCNVector3( 0.0,   -0.025,  0.025),
+            // Outer ring (8 directions)
+            SCNVector3( 0.045,  0.045,  0.0),
+            SCNVector3(-0.045, -0.045,  0.0),
+            SCNVector3( 0.0,    0.045,  0.045),
+            SCNVector3( 0.0,   -0.045, -0.045),
+            SCNVector3( 0.045,  0.0,   -0.045),
+            SCNVector3(-0.045,  0.0,    0.045),
+            SCNVector3( 0.035,  0.035,  0.035),
+            SCNVector3(-0.035, -0.035, -0.035),
         ]
         for (i, gn) in glowNodes.enumerated() {
             gn.name = "glow\(i)"
@@ -94,7 +100,7 @@ final class TrajectoryPathNode {
         // --- Traveled path: full route from origin to current position ---
         if splitIndex > 0 {
             let traveledPoints = Array(trajectoryPoints[0...splitIndex])
-            let traveledColor = UIColor(white: 0.55, alpha: 0.4)
+            let traveledColor = UIColor(red: 0.72, green: 0.69, blue: 0.52, alpha: 0.46)
 
             for tn in [traveledPathNode, traveledPathNode2] {
                 let mat = SCNMaterial()
@@ -140,7 +146,7 @@ final class TrajectoryPathNode {
         // --- Future path: grey from current to end ---
         if splitIndex < trajectoryPoints.count - 1 {
             let futurePoints = Array(trajectoryPoints[splitIndex...])
-            let futureColor = UIColor(white: 0.55, alpha: 0.4)
+            let futureColor = UIColor(red: 0.72, green: 0.69, blue: 0.52, alpha: 0.46)
 
             for fn in [futurePathNode, futurePathNode2] {
                 let mat = SCNMaterial()
@@ -155,7 +161,7 @@ final class TrajectoryPathNode {
         }
     }
 
-    /// Trail gradient: purple at spacecraft -> pink -> orange fading out at tail.
+    /// Trail gradient: bright magenta at spacecraft -> purple -> orange -> yellow -> black at tail.
     private func createTrailGeometry(from points: [SCNVector3], isGlow: Bool) -> SCNGeometry? {
         guard points.count >= 2 else { return nil }
 
@@ -164,29 +170,38 @@ final class TrajectoryPathNode {
         var colors: [SIMD4<Float>] = []
         colors.reserveCapacity(points.count)
         for i in 0..<points.count {
+            // t=0 at tail, t=1 at head (spacecraft)
             let t = Float(i) / Float(points.count - 1)
             let alpha = t * t * (isGlow ? 0.25 : 1.0)
 
             let r: Float
             let g: Float
             let b: Float
-            let u = 1.0 - t
 
-            if u < 0.3 {
-                let s = u / 0.3
-                r = 0.5 + 0.35 * s
-                g = 0.1 + 0.1 * s
-                b = 0.8 - 0.25 * s
-            } else if u < 0.6 {
-                let s = (u - 0.3) / 0.3
-                r = 0.85 + 0.15 * s
-                g = 0.2 + 0.2 * s
-                b = 0.55 - 0.3 * s
-            } else {
-                let s = (u - 0.6) / 0.4
+            if t < 0.15 {
+                // Black → Yellow
+                let s = t / 0.15
+                r = 1.0 * s
+                g = 0.85 * s
+                b = 0.2 * s
+            } else if t < 0.35 {
+                // Yellow → Orange
+                let s = (t - 0.15) / 0.2
                 r = 1.0
-                g = 0.4 + 0.2 * s
-                b = 0.25 - 0.15 * s
+                g = 0.85 - 0.35 * s   // 0.85 → 0.5
+                b = 0.2 - 0.1 * s     // 0.2 → 0.1
+            } else if t < 0.65 {
+                // Orange → Purple
+                let s = (t - 0.35) / 0.3
+                r = 1.0 - 0.4 * s     // 1.0 → 0.6
+                g = 0.5 - 0.35 * s    // 0.5 → 0.15
+                b = 0.1 + 0.7 * s     // 0.1 → 0.8
+            } else {
+                // Purple → Bright Magenta
+                let s = (t - 0.65) / 0.35
+                r = 0.6 + 0.4 * s     // 0.6 → 1.0
+                g = 0.15 + 0.05 * s   // 0.15 → 0.2
+                b = 0.8 - 0.2 * s     // 0.8 → 0.6
             }
 
             colors.append(SIMD4<Float>(r * alpha, g * alpha, b * alpha, alpha))

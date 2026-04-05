@@ -35,9 +35,9 @@ enum SpacecraftBuilder {
     }
 
     private static func makeRing(index: Int, color: UIColor) -> SCNNode {
-        let torus = SCNTorus(ringRadius: 0.4, pipeRadius: 0.015)
-        torus.ringSegmentCount = 48
-        torus.pipeSegmentCount = 8
+        let torus = SCNTorus(ringRadius: 0.4, pipeRadius: 0.012)
+        torus.ringSegmentCount = 64
+        torus.pipeSegmentCount = 16
 
         let material = SCNMaterial()
         material.diffuse.contents = color.withAlphaComponent(0.85)
@@ -45,6 +45,7 @@ enum SpacecraftBuilder {
         material.lightingModel = .constant
         material.blendMode = .add
         material.writesToDepthBuffer = false
+        material.readsFromDepthBuffer = false
         torus.materials = [material]
 
         let node = SCNNode(geometry: torus)

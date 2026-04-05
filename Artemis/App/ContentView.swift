@@ -79,13 +79,14 @@ struct ContentView: View {
             sceneController.update(for: missionTime)
         }
         .onChange(of: missionTime) { _, newValue in
+            guard !isPlaying else { return }
             sceneController.update(for: newValue)
         }
         .sheet(isPresented: $showingPrivacyPolicy) {
             PrivacyPolicyView()
         }
         .onAppear {
-            // Clamp to mission window
+            // Always snap to now on first launch
             let now = Date()
             if now < MissionTimeline.launchDate {
                 missionTime = MissionTimeline.launchDate
@@ -100,6 +101,23 @@ struct ContentView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                 dismissSplash()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            snapToNowIfPlaying()
+            sceneController.update(for: missionTime)
+        }
+    }
+
+    /// Snaps missionTime to the current real time (clamped to mission window) if playing.
+    private func snapToNowIfPlaying() {
+        guard isPlaying else { return }
+        let now = Date()
+        if now < MissionTimeline.launchDate {
+            missionTime = MissionTimeline.launchDate
+        } else if now > MissionTimeline.splashdownDate {
+            missionTime = MissionTimeline.splashdownDate
+        } else {
+            missionTime = now
         }
     }
 
